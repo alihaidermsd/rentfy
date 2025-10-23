@@ -1,0 +1,115 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  phone     String?
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  properties Property[]
+  bookings   Booking[]
+
+  @@map("users")
+}
+
+model Property {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  type        PropertyType
+  price       Float
+  location    String
+  city        String
+  bedrooms    Int?
+  bathrooms   Int?
+  areaSqft    Float?
+  latitude    Float?
+  longitude   Float?
+  images      String[]  
+  isAvailable Boolean   @default(true)
+  ownerId     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("properties")
+}
+
+model Service {
+  id           String         @id @default(cuid())
+  name         String
+  description  String
+  category     ServiceCategory
+  providerName String
+  locations    String[]      
+  basePrice    Float?
+  rating       Float?         @default(0.0)
+  isAvailable  Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  bookings Booking[]
+
+  @@map("services")
+}
+
+model Booking {
+  id         String   @id @default(cuid())
+  type       BookingType
+  propertyId String?
+  serviceId  String?
+  userId     String
+  startDate  DateTime
+  endDate    DateTime?
+  status     BookingStatus @default(PENDING)
+  totalPrice Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property Property? @relation(fields: [propertyId], references: [id])
+  service  Service?  @relation(fields: [serviceId], references: [id])
+
+  @@map("bookings")
+}
+
+enum PropertyType {
+  HOUSE
+  APARTMENT
+  PLOT
+  COMMERCIAL
+}
+
+enum ServiceCategory {
+  MOVING_TRANSPORT
+  CLEANING
+  INTERIOR_DESIGN
+  LEGAL
+  RENOVATION
+}
+
+enum BookingType {
+  PROPERTY
+  SERVICE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
