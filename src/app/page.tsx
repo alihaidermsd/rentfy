@@ -1,65 +1,159 @@
-import Image from "next/image";
+// src/app/page.tsx
+import Link from 'next/link'
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div className="min-h-screen">
+      {/* Hero Section */}
+      <section className="bg-gradient-to-br from-blue-600 via-blue-700 to-purple-800 text-white">
+        <div className="container mx-auto px-4 py-20">
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-5xl md:text-6xl font-bold mb-6">
+              Find Your Perfect 
+              <span className="block text-yellow-300">Stay</span>
+            </h1>
+            <p className="text-xl md:text-2xl mb-8 text-blue-100">
+              Discover amazing properties for your next adventure. From cozy apartments to luxury villas.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                href="/search"
+                className="bg-yellow-400 text-blue-900 px-8 py-4 rounded-lg font-bold text-lg hover:bg-yellow-300 transition-colors shadow-lg"
+              >
+                🔍 Explore Properties
+              </Link>
+              <Link
+                href="/properties/create"
+                className="border-2 border-white text-white px-8 py-4 rounded-lg font-bold text-lg hover:bg-white hover:text-blue-900 transition-colors"
+              >
+                🏠 List Your Property
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Why Choose Rentfy?
+            </h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              We make finding and booking your perfect stay simple and secure
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="text-center p-6">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">🔒</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Secure Bookings</h3>
+              <p className="text-gray-600">
+                Your payments and personal information are protected with bank-level security.
+              </p>
+            </div>
+
+            <div className="text-center p-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">⭐</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-3">Verified Properties</h3>
+              <p className="text-gray-600">
+                Every property is verified and reviewed by real guests.
+              </p>
+            </div>
+
+            <div className="text-center p-6">
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">💬</span>
+              </div>
+              <h3 className="text-xl font-semibold mb-3">24/7 Support</h3>
+              <p className="text-gray-600">
+                Our support team is available around the clock to help you.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Property Types Section */}
+      <section className="py-16 bg-gray-50">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Find Your Perfect Space
+            </h2>
+            <p className="text-xl text-gray-600">
+              Browse through our diverse collection of properties
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[
+              { type: 'APARTMENT', icon: '🏢', name: 'Apartments' },
+              { type: 'VILLA', icon: '🏡', name: 'Villas' },
+              { type: 'HOUSE', icon: '🏠', name: 'Houses' },
+              { type: 'ROOM', icon: '🛏️', name: 'Private Rooms' },
+            ].map((property) => (
+              <Link
+                key={property.type}
+                href={`/search?type=${property.type}`}
+                className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow text-center group"
+              >
+                <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">
+                  {property.icon}
+                </div>
+                <h3 className="font-semibold text-gray-800">{property.name}</h3>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-16 bg-blue-600 text-white">
+        <div className="container mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            <div>
+              <div className="text-3xl font-bold mb-2">500+</div>
+              <div className="text-blue-100">Properties</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold mb-2">10K+</div>
+              <div className="text-blue-100">Happy Guests</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold mb-2">50+</div>
+              <div className="text-blue-100">Cities</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold mb-2">4.8</div>
+              <div className="text-blue-100">Average Rating</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-16 bg-gray-900 text-white">
+        <div className="container mx-auto px-4 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-6">
+            Ready to Find Your Perfect Stay?
+          </h2>
+          <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+            Join thousands of travelers who have found their dream accommodation with Rentfy
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/search"
+            className="bg-yellow-400 text-gray-900 px-8 py-4 rounded-lg font-bold text-lg hover:bg-yellow-300 transition-colors inline-block"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Start Your Search Today
+          </Link>
         </div>
-      </main>
+      </section>
     </div>
-  );
+  )
 }
