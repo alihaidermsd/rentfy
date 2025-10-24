@@ -28,6 +28,7 @@ model User {
   bookings   Booking[]  @relation("GuestBookings")
   hostBookings Booking[] @relation("HostBookings")
   reviews    Review[]
+  payments   Payment[]  // ADDED: User can have multiple payments
 
   @@index([email])
   @@index([role])
@@ -147,7 +148,7 @@ model Booking {
   checkOut      DateTime
   totalPrice    Float
   status        BookingStatus  @default(PENDING)
-  paymentStatus PaymentStatus  @default(UNPAID)
+  paymentStatus BookingPaymentStatus  @default(UNPAID) // CHANGED: Use separate enum for booking
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -159,6 +160,7 @@ model Booking {
   host          User           @relation("HostBookings", fields: [hostId], references: [id], onDelete: Cascade)
   hostId        String
   review        Review?
+  payment       Payment?       // ADDED: Relation to payment
 
   @@index([propertyId])
   @@index([guestId])
@@ -192,6 +194,32 @@ model Review {
   @@index([guestId])
   @@index([overallRating])
   @@map("reviews")
+}
+
+// ===== PAYMENT MODEL =====
+model Payment {
+  id              String         @id @default(uuid())
+  amount          Float
+  currency        String         @default("USD")
+  status          PaymentStatus  @default(PENDING)
+  paymentMethod   String?        // 'card', 'paypal', 'bank_transfer'
+  paymentIntentId String?        // Stripe or other provider ID
+  receiptUrl      String?
+  metadata        Json?          // Additional payment data
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  booking         Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId       String         @unique
+  guest           User           @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  guestId         String         // ADDED: Track who made the payment
+
+  @@index([bookingId])
+  @@index([guestId])
+  @@index([status])
+  @@index([paymentIntentId])
+  @@map("payments")
 }
 
 // ===== JOIN TABLES =====
@@ -265,8 +293,18 @@ enum BookingStatus {
   COMPLETED
 }
 
-enum PaymentStatus {
+// SEPARATE ENUMS FOR BOOKING VS PAYMENT STATUS
+enum BookingPaymentStatus {
   UNPAID
   PAID
   REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
 }

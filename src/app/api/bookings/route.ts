@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
@@ -88,23 +89,26 @@ export async function GET(request: NextRequest) {
     const hasPrev = page > 1
 
     return NextResponse.json({
-      pagination: {
-        page,
-        limit,
-        totalCount,
-        totalPages,
-        hasNext,
-        hasPrev,
-        nextPage: hasNext ? page + 1 : null,
-        prevPage: hasPrev ? page - 1 : null
-      },
-      data: bookings
+      success: true,
+      data: {
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext,
+          hasPrev,
+          nextPage: hasNext ? page + 1 : null,
+          prevPage: hasPrev ? page - 1 : null
+        },
+        bookings
+      }
     })
 
   } catch (error: any) {
     console.error('Get bookings error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { success: false, error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
@@ -125,12 +129,12 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     const requiredFields = ['propertyId', 'guestId', 'checkIn', 'checkOut', 'totalPrice', 'hostId']
-    // use the parsed body (typed as any) and check for null/undefined
-    const missingFields = requiredFields.filter(field => (body as any)[field] == null)
+    const missingFields = requiredFields.filter(field => !body[field])
     
     if (missingFields.length > 0) {
       return NextResponse.json(
         { 
+          success: false,
           error: 'Missing required fields',
           missingFields
         },
@@ -149,7 +153,7 @@ export async function POST(request: NextRequest) {
 
     if (!property) {
       return NextResponse.json(
-        { error: 'Property not found or not available' },
+        { success: false, error: 'Property not found or not available' },
         { status: 404 }
       )
     }
@@ -161,7 +165,7 @@ export async function POST(request: NextRequest) {
 
     if (!guest) {
       return NextResponse.json(
-        { error: 'Guest not found' },
+        { success: false, error: 'Guest not found' },
         { status: 404 }
       )
     }
@@ -173,7 +177,7 @@ export async function POST(request: NextRequest) {
 
     if (!host) {
       return NextResponse.json(
-        { error: 'Host not found' },
+        { success: false, error: 'Host not found' },
         { status: 404 }
       )
     }
@@ -194,7 +198,7 @@ export async function POST(request: NextRequest) {
 
     if (conflictingBooking) {
       return NextResponse.json(
-        { error: 'Property not available for the selected dates' },
+        { success: false, error: 'Property not available for the selected dates' },
         { status: 409 }
       )
     }
@@ -236,12 +240,16 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(booking, { status: 201 })
+    return NextResponse.json({
+      success: true,
+      data: booking,
+      message: 'Booking created successfully'
+    }, { status: 201 })
 
   } catch (error: any) {
     console.error('Create booking error:', error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { success: false, error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
@@ -254,8 +262,20 @@ export async function PUT(request: NextRequest) {
     
     if (!id) {
       return NextResponse.json(
-        { error: 'Booking ID is required' },
+        { success: false, error: 'Booking ID is required' },
         { status: 400 }
+      )
+    }
+
+    // Check if booking exists first
+    const existingBooking = await prisma.booking.findUnique({
+      where: { id }
+    })
+
+    if (!existingBooking) {
+      return NextResponse.json(
+        { success: false, error: 'Booking not found' },
+        { status: 404 }
       )
     }
 
@@ -281,12 +301,24 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-    return NextResponse.json(booking)
+    return NextResponse.json({
+      success: true,
+      data: booking,
+      message: 'Booking updated successfully'
+    })
 
   } catch (error: any) {
     console.error('Update booking error:', error)
+    
+    if (error.code === 'P2025') {
+      return NextResponse.json(
+        { success: false, error: 'Booking not found' },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { success: false, error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
@@ -300,7 +332,28 @@ export async function DELETE(request: NextRequest) {
     
     if (!id) {
       return NextResponse.json(
-        { error: 'Booking ID is required' },
+        { success: false, error: 'Booking ID is required' },
+        { status: 400 }
+      )
+    }
+
+    // Check if booking exists first
+    const existingBooking = await prisma.booking.findUnique({
+      where: { id },
+      include: { review: true }
+    })
+
+    if (!existingBooking) {
+      return NextResponse.json(
+        { success: false, error: 'Booking not found' },
+        { status: 404 }
+      )
+    }
+
+    // Prevent deletion if review exists
+    if (existingBooking.review) {
+      return NextResponse.json(
+        { success: false, error: 'Cannot delete booking with existing review' },
         { status: 400 }
       )
     }
@@ -310,13 +363,22 @@ export async function DELETE(request: NextRequest) {
     })
 
     return NextResponse.json({ 
+      success: true,
       message: 'Booking deleted successfully'
     })
 
   } catch (error: any) {
     console.error('Delete booking error:', error)
+    
+    if (error.code === 'P2025') {
+      return NextResponse.json(
+        { success: false, error: 'Booking not found' },
+        { status: 404 }
+      )
+    }
+
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { success: false, error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
