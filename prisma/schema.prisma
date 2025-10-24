@@ -1,3 +1,5 @@
+// Prisma Schema for Property Hosting Platform (Airbnb + Booking.com Hybrid)
+// Production-grade schema with comprehensive models for properties, bookings, users, reviews, amenities, and availability
 
 generator client {
   provider = "prisma-client-js"
@@ -8,108 +10,263 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ===== USER MODEL =====
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  phone     String?
-  role      String   @default("user")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(uuid())
+  name       String
+  email      String    @unique
+  phone      String?
+  role       UserRole  @default(GUEST)
+  avatar     String?
+  bio        String?
+  isVerified Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  properties Property[]
-  bookings   Booking[]
+  // Relations
+  properties Property[] @relation("HostProperties")
+  bookings   Booking[]  @relation("GuestBookings")
+  hostBookings Booking[] @relation("HostBookings")
+  reviews    Review[]
 
+  @@index([email])
+  @@index([role])
   @@map("users")
 }
 
+// ===== PROPERTY MODEL =====
 model Property {
-  id          String   @id @default(cuid())
-  title       String
-  description String
-  type        PropertyType
-  price       Float
-  location    String
-  city        String
-  bedrooms    Int?
-  bathrooms   Int?
-  areaSqft    Float?
-  latitude    Float?
-  longitude   Float?
-  images      String[]  
-  isAvailable Boolean   @default(true)
-  ownerId     String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String         @id @default(uuid())
+  title         String
+  description   String
+  type          PropertyType
+  pricePerNight Float
+  maxGuests     Int
+  bedrooms      Int
+  bathrooms     Int
+  address       String
+  city          String
+  country       String
+  latitude      Float?
+  longitude     Float?
+  status        PropertyStatus @default(DRAFT)
+  policies      Json?          // Flexible metadata for house rules, cancellation policies, etc.
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  owner   User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  bookings Booking[]
+  // Relations
+  host          User           @relation("HostProperties", fields: [hostId], references: [id], onDelete: Cascade)
+  hostId        String
+  media         PropertyMedia[]
+  bookings      Booking[]
+  reviews       Review[]
+  amenities     PropertyAmenity[]
+  facilities    PropertyFacility[]
+  availability  Availability[]
 
+  @@index([hostId])
+  @@index([city])
+  @@index([country])
+  @@index([latitude, longitude])
+  @@index([pricePerNight])
+  @@index([status])
   @@map("properties")
 }
 
-model Service {
-  id           String         @id @default(cuid())
-  name         String
-  description  String
-  category     ServiceCategory
-  providerName String
-  locations    String[]      
-  basePrice    Float?
-  rating       Float?         @default(0.0)
-  isAvailable  Boolean        @default(true)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+// ===== PROPERTY MEDIA MODEL =====
+model PropertyMedia {
+  id         String    @id @default(uuid())
+  url        String
+  type       MediaType
+  isFeatured Boolean   @default(false)
+  order      Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  bookings Booking[]
+  // Relations
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
 
-  @@map("services")
+  @@index([propertyId])
+  @@index([isFeatured])
+  @@map("property_media")
 }
 
+// ===== AMENITY MODEL =====
+model Amenity {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  icon      String?  // Icon class or URL
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  properties PropertyAmenity[]
+
+  @@map("amenities")
+}
+
+// ===== FACILITY MODEL =====
+model Facility {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  icon      String?  // Icon class or URL
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  properties PropertyFacility[]
+
+  @@map("facilities")
+}
+
+// ===== AVAILABILITY MODEL =====
+model Availability {
+  id            String   @id @default(uuid())
+  date          DateTime
+  isAvailable   Boolean  @default(true)
+  priceOverride Float?   // Override the base price for specific dates
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+
+  @@unique([propertyId, date])
+  @@index([propertyId])
+  @@index([date])
+  @@map("availability")
+}
+
+// ===== BOOKING MODEL =====
 model Booking {
-  id         String   @id @default(cuid())
-  type       BookingType
-  propertyId String?
-  serviceId  String?
-  userId     String
-  startDate  DateTime
-  endDate    DateTime?
-  status     BookingStatus @default(PENDING)
-  totalPrice Float
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String         @id @default(uuid())
+  checkIn       DateTime
+  checkOut      DateTime
+  totalPrice    Float
+  status        BookingStatus  @default(PENDING)
+  paymentStatus PaymentStatus  @default(UNPAID)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  property Property? @relation(fields: [propertyId], references: [id])
-  service  Service?  @relation(fields: [serviceId], references: [id])
+  // Relations
+  property      Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId    String
+  guest         User           @relation("GuestBookings", fields: [guestId], references: [id], onDelete: Cascade)
+  guestId       String
+  host          User           @relation("HostBookings", fields: [hostId], references: [id], onDelete: Cascade)
+  hostId        String
+  review        Review?
 
+  @@index([propertyId])
+  @@index([guestId])
+  @@index([hostId])
+  @@index([checkIn, checkOut])
+  @@index([status])
   @@map("bookings")
 }
 
+// ===== REVIEW MODEL =====
+model Review {
+  id                String   @id @default(uuid())
+  ratingCleanliness Int      // 1-5 rating
+  ratingComfort     Int      // 1-5 rating
+  ratingLocation    Int      // 1-5 rating
+  ratingValue       Int      // 1-5 rating
+  overallRating     Float    // Calculated average
+  comment           String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId   String   @unique
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId  String
+  guest       User     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  guestId     String
+
+  @@index([propertyId])
+  @@index([guestId])
+  @@index([overallRating])
+  @@map("reviews")
+}
+
+// ===== JOIN TABLES =====
+
+// Property-Amenity many-to-many relationship
+model PropertyAmenity {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  amenityId String
+
+  @@unique([propertyId, amenityId])
+  @@index([propertyId])
+  @@index([amenityId])
+  @@map("property_amenities")
+}
+
+// Property-Facility many-to-many relationship
+model PropertyFacility {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId String
+  facility  Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facilityId String
+
+  @@unique([propertyId, facilityId])
+  @@index([propertyId])
+  @@index([facilityId])
+  @@map("property_facilities")
+}
+
+// ===== ENUMS =====
+
+enum UserRole {
+  GUEST
+  HOST
+  ADMIN
+}
+
 enum PropertyType {
-  HOUSE
   APARTMENT
-  PLOT
-  COMMERCIAL
+  VILLA
+  ROOM
+  HOUSE
+  HOTEL
 }
 
-enum ServiceCategory {
-  MOVING_TRANSPORT
-  CLEANING
-  INTERIOR_DESIGN
-  LEGAL
-  RENOVATION
+enum PropertyStatus {
+  ACTIVE
+  PENDING
+  DRAFT
+  SUSPENDED
 }
 
-enum BookingType {
-  PROPERTY
-  SERVICE
+enum MediaType {
+  IMAGE
+  VIDEO
 }
 
 enum BookingStatus {
   PENDING
   CONFIRMED
-  COMPLETED
   CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
 }

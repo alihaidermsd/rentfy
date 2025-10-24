@@ -14,8 +14,9 @@ export default function ApiTest() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
-  const [selectedService, setSelectedService] = useState<any>(null);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [token, setToken] = useState<string>('');
 
   const addResult = (endpoint: string, method: string, data: any, error?: string) => {
     setResults(prev => [...prev, { endpoint, method, data, error }]);
@@ -23,8 +24,19 @@ export default function ApiTest() {
 
   const clearResults = () => setResults([]);
 
+  // Helper function to make authenticated requests
+  const authFetch = async (url: string, options: RequestInit = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options.headers,
+    };
+
+    return fetch(url, { ...options, headers });
+  };
+
   // Test Authentication
-  const testRegister = async () => {
+  const testRegister = async (role: 'GUEST' | 'HOST' = 'GUEST') => {
     setLoading(true);
     try {
       const response = await fetch('/api/auth/register', {
@@ -32,13 +44,16 @@ export default function ApiTest() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: `test${Date.now()}@example.com`,
-          password: 'password123',
-          name: 'Test User',
-          phone: '03001234567'
+          name: `Test ${role}`,
+          phone: `0300${Math.floor(Math.random() * 10000000)}`,
+          role: role
         })
       });
       const data = await response.json();
-      if (data.user) setUser(data.user);
+      if (data.user) {
+        setUser(data.user);
+        setToken(data.token);
+      }
       addResult('/api/auth/register', 'POST', data);
     } catch (error) {
       addResult('/api/auth/register', 'POST', null, error instanceof Error ? error.message : 'Unknown error');
@@ -54,14 +69,14 @@ export default function ApiTest() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: 'test@example.com',
-          password: 'password123'
+          email: 'test@example.com' // Use any existing user email
         })
       });
       const data = await response.json();
       if (data.user) {
         setUser(data.user);
         setSelectedUser(data.user);
+        setToken(data.token);
       }
       addResult('/api/auth/login', 'POST', data);
     } catch (error) {
@@ -75,15 +90,15 @@ export default function ApiTest() {
   const testEndpoint = async (endpoint: string, method: string = 'GET') => {
     setLoading(true);
     try {
-      const response = await fetch(`/api${endpoint}`);
+      const response = await authFetch(`/api${endpoint}`);
       const data = await response.json();
       
       // Store first item for UPDATE/DELETE testing
-      if (endpoint === '/properties' && data.length > 0) {
-        setSelectedProperty(data[0]);
+      if (endpoint === '/properties' && data.data && data.data.length > 0) {
+        setSelectedProperty(data.data[0]);
       }
-      if (endpoint === '/services' && data.length > 0) {
-        setSelectedService(data[0]);
+      if (endpoint === '/bookings' && data.data && data.data.length > 0) {
+        setSelectedBooking(data.data[0]);
       }
       if (endpoint === '/users' && data.length > 0 && !selectedUser) {
         setSelectedUser(data[0]);
@@ -106,20 +121,22 @@ export default function ApiTest() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/properties', {
+      const response = await authFetch('/api/properties', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: 'Test Property ' + Date.now(),
-          description: 'This is a test property',
+          title: 'Beautiful Test Property ' + Date.now(),
+          description: 'This is a beautiful test property with amazing views and modern amenities.',
           type: 'APARTMENT',
-          price: 1000000,
-          location: 'Test Location',
-          city: 'Karachi',
+          pricePerNight: 120,
+          maxGuests: 4,
           bedrooms: 2,
           bathrooms: 1,
-          areaSqft: 1000,
-          ownerId: user.id
+          address: '123 Test Street',
+          city: 'Test City',
+          country: 'Test Country',
+          hostId: user.id,
+          latitude: 40.7128,
+          longitude: -74.0060
         })
       });
       const data = await response.json();
@@ -127,31 +144,6 @@ export default function ApiTest() {
       addResult('/api/properties', 'POST', data);
     } catch (error) {
       addResult('/api/properties', 'POST', null, error instanceof Error ? error.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const testCreateService = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/services', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'Test Service ' + Date.now(),
-          description: 'This is a test service',
-          category: 'CLEANING',
-          providerName: 'Test Provider',
-          locations: 'Karachi, Lahore',
-          basePrice: 5000
-        })
-      });
-      const data = await response.json();
-      setSelectedService(data);
-      addResult('/api/services', 'POST', data);
-    } catch (error) {
-      addResult('/api/services', 'POST', null, error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -165,18 +157,23 @@ export default function ApiTest() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/bookings', {
+      const checkIn = new Date();
+      const checkOut = new Date();
+      checkOut.setDate(checkOut.getDate() + 3);
+
+      const response = await authFetch('/api/bookings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'PROPERTY',
           propertyId: selectedProperty.id,
-          userId: user.id,
-          startDate: new Date().toISOString(),
-          totalPrice: selectedProperty.price ? selectedProperty.price * 0.1 : 10000
+          guestId: user.id,
+          hostId: selectedProperty.hostId,
+          checkIn: checkIn.toISOString(),
+          checkOut: checkOut.toISOString(),
+          totalPrice: selectedProperty.pricePerNight * 3
         })
       });
       const data = await response.json();
+      setSelectedBooking(data);
       addResult('/api/bookings', 'POST', data);
     } catch (error) {
       addResult('/api/bookings', 'POST', null, error instanceof Error ? error.message : 'Unknown error');
@@ -194,14 +191,13 @@ export default function ApiTest() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/properties', {
+      const response = await authFetch('/api/properties', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: selectedProperty.id,
           title: `Updated ${selectedProperty.title}`,
-          description: `This property was updated at ${new Date().toLocaleTimeString()}`,
-          price: selectedProperty.price ? selectedProperty.price + 100000 : 100000
+          description: `This property was updated at ${new Date().toLocaleTimeString()}. Features amazing new amenities!`,
+          pricePerNight: selectedProperty.pricePerNight + 20
         })
       });
       const data = await response.json();
@@ -214,57 +210,27 @@ export default function ApiTest() {
     }
   };
 
-  const testUpdateService = async () => {
-    if (!selectedService) {
-      addResult('/api/services', 'PUT', null, 'No service selected');
+  const testUpdateBooking = async () => {
+    if (!selectedBooking) {
+      addResult('/api/bookings', 'PUT', null, 'No booking selected');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch('/api/services', {
+      const response = await authFetch('/api/bookings', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: selectedService.id,
-          name: `Updated ${selectedService.name}`,
-          description: `This service was updated at ${new Date().toLocaleTimeString()}`,
-          basePrice: selectedService.basePrice ? selectedService.basePrice + 1000 : 5000
+          id: selectedBooking.id,
+          status: 'CONFIRMED',
+          paymentStatus: 'PAID'
         })
       });
       const data = await response.json();
-      setSelectedService(data);
-      addResult('/api/services', 'PUT', data);
+      setSelectedBooking(data);
+      addResult('/api/bookings', 'PUT', data);
     } catch (error) {
-      addResult('/api/services', 'PUT', null, error instanceof Error ? error.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const testUpdateUser = async () => {
-    if (!selectedUser) {
-      addResult('/api/users', 'PUT', null, 'No user selected');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch('/api/users', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: selectedUser.id,
-          name: `Updated ${selectedUser.name}`,
-          phone: `0300${Math.floor(Math.random() * 10000000)}`
-        })
-      });
-      const data = await response.json();
-      setSelectedUser(data);
-      if (user?.id === selectedUser.id) setUser(data);
-      addResult('/api/users', 'PUT', data);
-    } catch (error) {
-      addResult('/api/users', 'PUT', null, error instanceof Error ? error.message : 'Unknown error');
+      addResult('/api/bookings', 'PUT', null, error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -279,7 +245,7 @@ export default function ApiTest() {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/properties?id=${selectedProperty.id}`, {
+      const response = await authFetch(`/api/properties?id=${selectedProperty.id}`, {
         method: 'DELETE'
       });
       const data = await response.json();
@@ -292,63 +258,50 @@ export default function ApiTest() {
     }
   };
 
-  const testDeleteService = async () => {
-    if (!selectedService) {
-      addResult('/api/services', 'DELETE', null, 'No service selected');
+  const testDeleteBooking = async () => {
+    if (!selectedBooking) {
+      addResult('/api/bookings', 'DELETE', null, 'No booking selected');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/services?id=${selectedService.id}`, {
+      const response = await authFetch(`/api/bookings?id=${selectedBooking.id}`, {
         method: 'DELETE'
       });
       const data = await response.json();
-      addResult('/api/services', 'DELETE', data);
-      setSelectedService(null);
+      addResult('/api/bookings', 'DELETE', data);
+      setSelectedBooking(null);
     } catch (error) {
-      addResult('/api/services', 'DELETE', null, error instanceof Error ? error.message : 'Unknown error');
+      addResult('/api/bookings', 'DELETE', null, error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
-  const testDeleteUser = async () => {
-    if (!selectedUser) {
-      addResult('/api/users', 'DELETE', null, 'No user selected');
-      return;
-    }
-
-    // Don't delete the currently logged in user
-    if (user?.id === selectedUser.id) {
-      addResult('/api/users', 'DELETE', null, 'Cannot delete currently logged in user');
-      return;
-    }
-
+  // Test Search with pagination
+  const testSearch = async (query: string, page: number = 1) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/users?id=${selectedUser.id}`, {
-        method: 'DELETE'
-      });
+      const response = await authFetch(`/api/search?q=${query}&page=${page}&limit=5`);
       const data = await response.json();
-      addResult('/api/users', 'DELETE', data);
-      setSelectedUser(null);
+      addResult(`/api/search?q=${query}&page=${page}`, 'GET', data);
     } catch (error) {
-      addResult('/api/users', 'DELETE', null, error instanceof Error ? error.message : 'Unknown error');
+      addResult(`/api/search?q=${query}&page=${page}`, 'GET', null, error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Test Search
-  const testSearch = async (query: string) => {
+  // Test pagination
+  const testPagination = async (endpoint: string, page: number = 1) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/search?q=${query}`);
+      const response = await authFetch(`/api${endpoint}?page=${page}&limit=3`);
       const data = await response.json();
-      addResult(`/api/search?q=${query}`, 'GET', data);
+      addResult(`${endpoint}?page=${page}&limit=3`, 'GET', data);
     } catch (error) {
-      addResult(`/api/search?q=${query}`, 'GET', null, error instanceof Error ? error.message : 'Unknown error');
+      addResult(`${endpoint}?page=${page}`, 'GET', null, error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -357,14 +310,15 @@ export default function ApiTest() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">API Testing Dashboard - Full CRUD</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">API Testing Dashboard - Rentfy</h1>
         
         {/* User Info */}
         {user && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-            <h3 className="font-semibold text-green-800">Logged in as:</h3>
+            <h3 className="font-semibold text-green-800">🔐 Logged in as:</h3>
             <p className="text-green-600">{user.name} ({user.email})</p>
-            <p className="text-green-600">ID: {user.id}</p>
+            <p className="text-green-600">Role: {user.role} | ID: {user.id}</p>
+            <p className="text-green-600 text-sm">Token: {token ? '✓ Present' : '✗ Missing'}</p>
           </div>
         )}
 
@@ -372,30 +326,28 @@ export default function ApiTest() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {selectedProperty && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <h4 className="font-semibold text-blue-800">Selected Property</h4>
-              <p className="text-blue-600 text-sm">{selectedProperty.title || 'No title'}</p>
+              <h4 className="font-semibold text-blue-800">🏠 Selected Property</h4>
+              <p className="text-blue-600 text-sm">{selectedProperty.title}</p>
               <p className="text-blue-600 text-sm">
-                PKR {selectedProperty.price ? selectedProperty.price.toLocaleString() : 'N/A'}
+                ${selectedProperty.pricePerNight}/night • {selectedProperty.bedrooms} beds
               </p>
-              {selectedProperty.location && (
-                <p className="text-blue-600 text-sm">{selectedProperty.location}</p>
-              )}
+              <p className="text-blue-600 text-sm">{selectedProperty.city}, {selectedProperty.country}</p>
             </div>
           )}
-          {selectedService && (
+          {selectedBooking && (
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-              <h4 className="font-semibold text-purple-800">Selected Service</h4>
-              <p className="text-purple-600 text-sm">{selectedService.name || 'No name'}</p>
-              <p className="text-purple-600 text-sm">
-                PKR {selectedService.basePrice ? selectedService.basePrice.toLocaleString() : 'N/A'}
-              </p>
+              <h4 className="font-semibold text-purple-800">📅 Selected Booking</h4>
+              <p className="text-purple-600 text-sm">Status: {selectedBooking.status}</p>
+              <p className="text-purple-600 text-sm">Payment: {selectedBooking.paymentStatus}</p>
+              <p className="text-purple-600 text-sm">Total: ${selectedBooking.totalPrice}</p>
             </div>
           )}
           {selectedUser && (
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-              <h4 className="font-semibold text-orange-800">Selected User</h4>
-              <p className="text-orange-600 text-sm">{selectedUser.name || 'No name'}</p>
-              <p className="text-orange-600 text-sm">{selectedUser.email || 'No email'}</p>
+              <h4 className="font-semibold text-orange-800">👤 Selected User</h4>
+              <p className="text-orange-600 text-sm">{selectedUser.name}</p>
+              <p className="text-orange-600 text-sm">{selectedUser.email}</p>
+              <p className="text-orange-600 text-sm">Role: {selectedUser.role}</p>
             </div>
           )}
         </div>
@@ -407,18 +359,25 @@ export default function ApiTest() {
           {/* Authentication */}
           <div className="mb-6">
             <h3 className="text-lg font-medium mb-2 text-gray-700">🔐 Authentication</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
               <button
-                onClick={testRegister}
+                onClick={() => testRegister('GUEST')}
                 disabled={loading}
                 className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
               >
-                Test Register
+                Register Guest
+              </button>
+              <button
+                onClick={() => testRegister('HOST')}
+                disabled={loading}
+                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
+              >
+                Register Host
               </button>
               <button
                 onClick={testLogin}
                 disabled={loading}
-                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 disabled:opacity-50"
+                className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 disabled:opacity-50"
               >
                 Test Login
               </button>
@@ -430,39 +389,11 @@ export default function ApiTest() {
             <h3 className="text-lg font-medium mb-2 text-gray-700">📊 READ Operations</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mb-4">
               <button
-                onClick={() => testEndpoint('/health')}
-                disabled={loading}
-                className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 disabled:opacity-50 text-sm"
-              >
-                Health
-              </button>
-              <button
-                onClick={() => testEndpoint('/test')}
-                disabled={loading}
-                className="bg-gray-500 text-white px-3 py-2 rounded hover:bg-gray-600 disabled:opacity-50 text-sm"
-              >
-                Test
-              </button>
-              <button
-                onClick={() => testEndpoint('/users')}
-                disabled={loading}
-                className="bg-indigo-500 text-white px-3 py-2 rounded hover:bg-indigo-600 disabled:opacity-50 text-sm"
-              >
-                All Users
-              </button>
-              <button
                 onClick={() => testEndpoint('/properties')}
                 disabled={loading}
                 className="bg-indigo-500 text-white px-3 py-2 rounded hover:bg-indigo-600 disabled:opacity-50 text-sm"
               >
                 Properties
-              </button>
-              <button
-                onClick={() => testEndpoint('/services')}
-                disabled={loading}
-                className="bg-indigo-500 text-white px-3 py-2 rounded hover:bg-indigo-600 disabled:opacity-50 text-sm"
-              >
-                Services
               </button>
               <button
                 onClick={() => testEndpoint('/bookings')}
@@ -471,26 +402,26 @@ export default function ApiTest() {
               >
                 Bookings
               </button>
+              <button
+                onClick={() => testEndpoint('/users')}
+                disabled={loading}
+                className="bg-indigo-500 text-white px-3 py-2 rounded hover:bg-indigo-600 disabled:opacity-50 text-sm"
+              >
+                Users
+              </button>
             </div>
           </div>
 
           {/* CREATE Operations */}
           <div className="mb-6">
             <h3 className="text-lg font-medium mb-2 text-gray-700">➕ CREATE Operations</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <button
                 onClick={testCreateProperty}
                 disabled={loading || !user}
                 className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600 disabled:opacity-50 text-sm"
               >
                 Create Property
-              </button>
-              <button
-                onClick={testCreateService}
-                disabled={loading}
-                className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600 disabled:opacity-50 text-sm"
-              >
-                Create Service
               </button>
               <button
                 onClick={testCreateBooking}
@@ -505,7 +436,7 @@ export default function ApiTest() {
           {/* UPDATE Operations */}
           <div className="mb-6">
             <h3 className="text-lg font-medium mb-2 text-gray-700">✏️ UPDATE Operations</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <button
                 onClick={testUpdateProperty}
                 disabled={loading || !selectedProperty}
@@ -514,18 +445,11 @@ export default function ApiTest() {
                 Update Property
               </button>
               <button
-                onClick={testUpdateService}
-                disabled={loading || !selectedService}
+                onClick={testUpdateBooking}
+                disabled={loading || !selectedBooking}
                 className="bg-yellow-500 text-white px-3 py-2 rounded hover:bg-yellow-600 disabled:opacity-50 text-sm"
               >
-                Update Service
-              </button>
-              <button
-                onClick={testUpdateUser}
-                disabled={loading || !selectedUser}
-                className="bg-yellow-500 text-white px-3 py-2 rounded hover:bg-yellow-600 disabled:opacity-50 text-sm"
-              >
-                Update User
+                Update Booking
               </button>
             </div>
           </div>
@@ -533,7 +457,7 @@ export default function ApiTest() {
           {/* DELETE Operations */}
           <div className="mb-6">
             <h3 className="text-lg font-medium mb-2 text-gray-700">🗑️ DELETE Operations</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <button
                 onClick={testDeleteProperty}
                 disabled={loading || !selectedProperty}
@@ -542,26 +466,19 @@ export default function ApiTest() {
                 Delete Property
               </button>
               <button
-                onClick={testDeleteService}
-                disabled={loading || !selectedService}
+                onClick={testDeleteBooking}
+                disabled={loading || !selectedBooking}
                 className="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 disabled:opacity-50 text-sm"
               >
-                Delete Service
-              </button>
-              <button
-                onClick={testDeleteUser}
-                disabled={loading || !selectedUser || (user?.id === selectedUser?.id)}
-                className="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 disabled:opacity-50 text-sm"
-              >
-                Delete User
+                Delete Booking
               </button>
             </div>
           </div>
 
-          {/* Search */}
+          {/* Search & Pagination */}
           <div className="mb-4">
-            <h3 className="text-lg font-medium mb-2 text-gray-700">🔍 Search</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <h3 className="text-lg font-medium mb-2 text-gray-700">🔍 Search & Pagination</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
               <button
                 onClick={() => testSearch('apartment')}
                 disabled={loading}
@@ -570,25 +487,25 @@ export default function ApiTest() {
                 Search "apartment"
               </button>
               <button
-                onClick={() => testSearch('cleaning')}
+                onClick={() => testSearch('villa')}
                 disabled={loading}
                 className="bg-teal-500 text-white px-3 py-2 rounded hover:bg-teal-600 disabled:opacity-50 text-sm"
               >
-                Search "cleaning"
+                Search "villa"
               </button>
               <button
-                onClick={() => testSearch('karachi')}
+                onClick={() => testPagination('/properties', 1)}
                 disabled={loading}
-                className="bg-teal-500 text-white px-3 py-2 rounded hover:bg-teal-600 disabled:opacity-50 text-sm"
+                className="bg-cyan-500 text-white px-3 py-2 rounded hover:bg-cyan-600 disabled:opacity-50 text-sm"
               >
-                Search "karachi"
+                Properties Page 1
               </button>
               <button
-                onClick={() => testSearch('test')}
+                onClick={() => testPagination('/bookings', 1)}
                 disabled={loading}
-                className="bg-teal-500 text-white px-3 py-2 rounded hover:bg-teal-600 disabled:opacity-50 text-sm"
+                className="bg-cyan-500 text-white px-3 py-2 rounded hover:bg-cyan-600 disabled:opacity-50 text-sm"
               >
-                Search "test"
+                Bookings Page 1
               </button>
             </div>
           </div>

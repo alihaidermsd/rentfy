@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json()
+    const { email } = await request.json()
 
-    console.log('🔐 Login attempt for:', email)
+    console.log('🔐 Passwordless login attempt for:', email)
 
     // Validate input
-    if (!email || !password) {
+    if (!email) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'Email is required' },
         { status: 400 }
       )
     }
@@ -27,50 +27,60 @@ export async function POST(request: Request) {
       }
     })
 
+    // If user doesn't exist, create a new one
     if (!user) {
-      console.log('❌ User not found:', email)
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
+      const newUser = await prisma.user.create({
+        data: {
+          email: email.toLowerCase().trim(),
+          name: email.split('@')[0], // Default name from email
+          role: 'GUEST' // Default role
+        }
+      })
+
+      console.log('✅ New user created:', newUser.email)
+
+      // Generate JWT token
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key'
+      
+      const token = jwt.sign(
+        { 
+          userId: newUser.id, 
+          email: newUser.email,
+          role: newUser.role 
+        },
+        JWT_SECRET,
+        { expiresIn: '7d' }
       )
+
+      return NextResponse.json({
+        success: true,
+        user: newUser,
+        token,
+        message: 'Login successful - new user created'
+      })
     }
 
-    console.log('✅ User found:', user.email)
+    console.log('✅ User found:', user.email, 'Role:', user.role)
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password)
-    
-    console.log('🔑 Password validation result:', isPasswordValid)
-
-    if (!isPasswordValid) {
-      console.log('❌ Invalid password for user:', email)
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      )
-    }
-
-    // Generate JWT token
-    const JWT_SECRET = process.env.JWT_SECRET || '629da79976094da95bf2522a099b2e157e531b0ccc6d575269c489e60b602ce9'
+    // Generate JWT token for existing user
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-fallback-secret-key'
     
     const token = jwt.sign(
       { 
         userId: user.id, 
         email: user.email,
-        role: user.role 
+        role: user.role,
+        name: user.name
       },
       JWT_SECRET,
       { expiresIn: '7d' }
     )
 
-    // Return user data (excluding password)
-    const { password: _, ...userWithoutPassword } = user
-
-    console.log('✅ Login successful for:', user.email)
+    console.log('✅ Login successful for:', user.email, 'Role:', user.role)
 
     return NextResponse.json({
       success: true,
-      user: userWithoutPassword,
+      user,
       token,
       message: 'Login successful'
     })

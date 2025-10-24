@@ -1,46 +1,110 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// GET - Read all bookings
+// GET - Read all bookings with pagination
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-    const type = searchParams.get('type')
+    const guestId = searchParams.get('guestId')
+    const hostId = searchParams.get('hostId')
+    const status = searchParams.get('status')
+    
+    // Pagination parameters
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const skip = (page - 1) * limit
+
+    // Validate pagination parameters
+    if (page < 1 || limit < 1 || limit > 100) {
+      return NextResponse.json(
+        { error: 'Invalid pagination parameters. Page must be >= 1, limit between 1-100' },
+        { status: 400 }
+      )
+    }
 
     const filters: any = {
       include: {
-        user: {
+        guest: {
           select: {
             id: true,
             name: true,
-            email: true
+            email: true,
+            phone: true
           }
         },
-        property: true,
-        service: true
+        host: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true
+          }
+        },
+        property: {
+          include: {
+            media: {
+              where: { isFeatured: true },
+              take: 1
+            }
+          }
+        },
+        review: true
       },
       orderBy: {
         createdAt: 'desc'
-      }
+      },
+      skip,
+      take: limit
     }
     
-    if (userId) {
-      filters.where = { ...filters.where, userId }
+    // Build where conditions
+    const whereConditions: any = {}
+    
+    if (guestId) {
+      whereConditions.guestId = guestId
     }
 
-    if (type) {
-      filters.where = { ...filters.where, type: type as any }
+    if (hostId) {
+      whereConditions.hostId = hostId
     }
 
-    const bookings = await prisma.booking.findMany(filters)
+    if (status) {
+      whereConditions.status = status as any
+    }
 
-    return NextResponse.json(bookings)
+    if (Object.keys(whereConditions).length > 0) {
+      filters.where = whereConditions
+    }
 
-  } catch (error) {
+    // Get paginated bookings and total count
+    const [bookings, totalCount] = await Promise.all([
+      prisma.booking.findMany(filters),
+      prisma.booking.count({ where: whereConditions })
+    ])
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(totalCount / limit)
+    const hasNext = page < totalPages
+    const hasPrev = page > 1
+
+    return NextResponse.json({
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNext,
+        hasPrev,
+        nextPage: hasNext ? page + 1 : null,
+        prevPage: hasPrev ? page - 1 : null
+      },
+      data: bookings
+    })
+
+  } catch (error: any) {
     console.error('Get bookings error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
@@ -49,38 +113,135 @@ export async function GET(request: NextRequest) {
 // POST - Create booking
 export async function POST(request: NextRequest) {
   try {
-    const { type, propertyId, serviceId, userId, startDate, endDate, totalPrice } = await request.json()
+    const body = await request.json()
+    const {
+      propertyId,
+      guestId,
+      checkIn,
+      checkOut,
+      totalPrice,
+      hostId
+    } = body
+
+    // Validate required fields
+    const requiredFields = ['propertyId', 'guestId', 'checkIn', 'checkOut', 'totalPrice', 'hostId']
+    // use the parsed body (typed as any) and check for null/undefined
+    const missingFields = requiredFields.filter(field => (body as any)[field] == null)
     
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Missing required fields',
+          missingFields
+        },
+        { status: 400 }
+      )
+    }
+
+    // Check if property exists and is available
+    const property = await prisma.property.findUnique({
+      where: { 
+        id: propertyId,
+        isDeleted: false,
+        status: 'ACTIVE'
+      }
+    })
+
+    if (!property) {
+      return NextResponse.json(
+        { error: 'Property not found or not available' },
+        { status: 404 }
+      )
+    }
+
+    // Check if guest exists
+    const guest = await prisma.user.findUnique({
+      where: { id: guestId }
+    })
+
+    if (!guest) {
+      return NextResponse.json(
+        { error: 'Guest not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if host exists
+    const host = await prisma.user.findUnique({
+      where: { id: hostId }
+    })
+
+    if (!host) {
+      return NextResponse.json(
+        { error: 'Host not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check availability for the dates
+    const conflictingBooking = await prisma.booking.findFirst({
+      where: {
+        propertyId,
+        OR: [
+          {
+            checkIn: { lte: new Date(checkOut) },
+            checkOut: { gte: new Date(checkIn) }
+          }
+        ],
+        status: { in: ['PENDING', 'CONFIRMED'] }
+      }
+    })
+
+    if (conflictingBooking) {
+      return NextResponse.json(
+        { error: 'Property not available for the selected dates' },
+        { status: 409 }
+      )
+    }
+
     const booking = await prisma.booking.create({
       data: {
-        type,
-        propertyId: type === 'PROPERTY' ? propertyId : null,
-        serviceId: type === 'SERVICE' ? serviceId : null,
-        userId,
-        startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null,
-        totalPrice,
-        status: 'PENDING'
+        propertyId,
+        guestId,
+        hostId,
+        checkIn: new Date(checkIn),
+        checkOut: new Date(checkOut),
+        totalPrice: parseFloat(totalPrice),
+        status: 'PENDING',
+        paymentStatus: 'UNPAID'
       },
       include: {
-        user: {
+        guest: {
           select: {
             id: true,
             name: true,
             email: true
           }
         },
-        property: true,
-        service: true
+        host: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        property: {
+          include: {
+            media: {
+              where: { isFeatured: true },
+              take: 1
+            }
+          }
+        }
       }
     })
 
-    return NextResponse.json(booking)
+    return NextResponse.json(booking, { status: 201 })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create booking error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
@@ -102,24 +263,30 @@ export async function PUT(request: NextRequest) {
       where: { id },
       data: updateData,
       include: {
-        user: {
+        guest: {
           select: {
             id: true,
             name: true,
             email: true
           }
         },
-        property: true,
-        service: true
+        host: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        property: true
       }
     })
 
     return NextResponse.json(booking)
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Update booking error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
@@ -146,10 +313,10 @@ export async function DELETE(request: NextRequest) {
       message: 'Booking deleted successfully'
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Delete booking error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     )
   }
