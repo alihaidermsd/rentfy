@@ -1,7 +1,7 @@
 // /app/properties/update/[id]/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 
 export default function UpdatePropertyPage() {
@@ -30,14 +30,7 @@ export default function UpdatePropertyPage() {
     status: 'DRAFT'
   })
 
-  useEffect(() => {
-    if (propertyId) {
-      fetchProperty()
-    }
-  }, [propertyId])
-
-  // Fetch property data from your API
-  const fetchProperty = async () => {
+  const fetchProperty = useCallback(async () => {
     try {
       console.log('🔄 Fetching property:', propertyId)
       
@@ -80,7 +73,13 @@ export default function UpdatePropertyPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [propertyId])
+
+  useEffect(() => {
+    if (propertyId) {
+      fetchProperty()
+    }
+  }, [propertyId, fetchProperty])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -1,7 +1,7 @@
 // /app/properties/delete/[id]/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 
 export default function DeletePropertyPage() {
@@ -12,13 +12,7 @@ export default function DeletePropertyPage() {
   const [loading, setLoading] = useState(false)
   const [property, setProperty] = useState<any>(null)
 
-  useEffect(() => {
-    if (propertyId) {
-      fetchProperty()
-    }
-  }, [propertyId])
-
-  const fetchProperty = async () => {
+  const fetchProperty = useCallback(async () => {
     try {
       // Since you have single API file, get all properties and find the specific one
       const response = await fetch('/api/properties')
@@ -41,7 +35,13 @@ export default function DeletePropertyPage() {
       alert('Property not found')
       router.push('/properties')
     }
-  }
+  }, [propertyId, router])
+
+  useEffect(() => {
+    if (propertyId) {
+      fetchProperty()
+    }
+  }, [propertyId, fetchProperty])
 
   const handleDelete = async () => {
     if (!confirm('Are you absolutely sure you want to delete this property? This action cannot be undone.')) {

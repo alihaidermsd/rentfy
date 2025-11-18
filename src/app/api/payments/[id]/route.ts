@@ -4,10 +4,10 @@ import { prisma } from '@/lib/prisma'
 // GET - Get payment by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const payment = await prisma.payment.findUnique({
       where: { id },
@@ -60,10 +60,10 @@ export async function GET(
 // PATCH - Update payment status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const { status, receiptUrl, paymentIntentId } = await request.json()
 
     const payment = await prisma.payment.update({

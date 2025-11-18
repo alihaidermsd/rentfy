@@ -6,42 +6,20 @@ export async function GET() {
     // Test PostgreSQL connection
     const dbInfo = await prisma.$queryRaw`SELECT version() as version`
     
-    // Test array features
-    const testService = await prisma.service.create({
-      data: {
-        name: 'Neon.tech Test Service',
-        description: 'Testing PostgreSQL arrays on Neon.tech',
-        category: 'CLEANING',
-        providerName: 'Neon Test',
-        locations: ['Karachi', 'Lahore', 'Islamabad'], // Array!
-        basePrice: 15000
-      }
-    })
-
-    // Test array query
-    const karachiServices = await prisma.service.findMany({
-      where: {
-        locations: {
-          has: 'Karachi'
-        }
-      }
-    })
+    const propertiesCount = await prisma.property.count()
+    const usersCount = await prisma.user.count()
 
     return NextResponse.json({
       message: '✅ Neon.tech PostgreSQL is working!',
       database: dbInfo,
-      arrayTest: {
-        createdService: testService,
-        arrayQuery: {
-          karachiServicesCount: karachiServices.length,
-          sample: karachiServices[0]
-        }
+      stats: {
+        properties: propertiesCount,
+        users: usersCount,
       },
       features: {
-        arrays: '✅ Working',
-        caseInsensitiveSearch: '✅ Available',
-        fullTextSearch: '✅ Available'
-      }
+        connection: '✅ Healthy',
+        prismaClient: '✅ Operational',
+      },
     })
 
   } catch (error) {

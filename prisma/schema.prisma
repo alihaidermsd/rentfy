@@ -1,5 +1,5 @@
-// Prisma Schema for Property Hosting Platform (Airbnb + Booking.com Hybrid)
-// Production-grade schema with comprehensive models for properties, bookings, users, reviews, amenities, and availability
+// Prisma Schema for Property Hosting Platform (Airbnb + Zameen.com Hybrid)
+// Supports both short-term rentals AND property sales
 
 generator client {
   provider = "prisma-client-js"
@@ -28,7 +28,8 @@ model User {
   bookings   Booking[]  @relation("GuestBookings")
   hostBookings Booking[] @relation("HostBookings")
   reviews    Review[]
-  payments   Payment[]  // ADDED: User can have multiple payments
+  payments   Payment[]
+  saleInquiries SaleInquiry[] @relation("BuyerInquiries")
 
   @@index([email])
   @@index([role])
@@ -41,22 +42,45 @@ model Property {
   title         String
   description   String
   type          PropertyType
-  pricePerNight Float
-  maxGuests     Int
-  bedrooms      Int
-  bathrooms     Int
+  // ===== PURPOSE FIELD (UNIFIED) =====
+  purpose       PropertyPurpose @default(RENT) // RENT, SALE, RENT_AND_SALE
+  
+  // ===== PRICING FIELDS =====
+  pricePerNight Float?         // For short-term rentals
+  rentPrice     Float?         // For long-term rentals (monthly)
+  salePrice     Float?         // For properties for sale
+  
+  // ===== PROPERTY SPECIFICATIONS =====
+  maxGuests     Int?           // For rentals
+  bedrooms      Int?
+  bathrooms     Int?
+  area          Float?         // Square footage/meters
+  areaUnit      String?        @default("sqft")
+  yearBuilt     Int?
+  plotArea      Float?         // For plots/land
+  isFurnished   Boolean?       @default(false)
+  ownershipType String?        // FREEHOLD, LEASEHOLD, etc.
+  possessionDate DateTime?     // When property is available
+  
+  // ===== LOCATION FIELDS =====
   address       String
   city          String
+  state         String?
   country       String
   latitude      Float?
   longitude     Float?
+  
+  // ===== STATUS FIELDS =====
   status        PropertyStatus @default(DRAFT)
-  policies      Json?          // Flexible metadata for house rules, cancellation policies, etc.
+  isFeatured    Boolean        @default(false)
   isDeleted     Boolean        @default(false)
+  policies      Json?          // House rules, cancellation policies, etc.
+  
+  // ===== TIMESTAMPS =====
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  // Relations
+  // ===== RELATIONS =====
   host          User           @relation("HostProperties", fields: [hostId], references: [id], onDelete: Cascade)
   hostId        String
   media         PropertyMedia[]
@@ -65,13 +89,18 @@ model Property {
   amenities     PropertyAmenity[]
   facilities    PropertyFacility[]
   availability  Availability[]
+  saleInquiries SaleInquiry[]
 
   @@index([hostId])
   @@index([city])
   @@index([country])
   @@index([latitude, longitude])
   @@index([pricePerNight])
+  @@index([salePrice])
+  @@index([rentPrice])
+  @@index([purpose])
   @@index([status])
+  @@index([isFeatured])
   @@map("properties")
 }
 
@@ -85,7 +114,6 @@ model PropertyMedia {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  // Relations
   property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId String
 
@@ -98,11 +126,11 @@ model PropertyMedia {
 model Amenity {
   id        String   @id @default(uuid())
   name      String   @unique
-  icon      String?  // Icon class or URL
+  icon      String?
+  category  AmenityCategory?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   properties PropertyAmenity[]
 
   @@map("amenities")
@@ -112,11 +140,11 @@ model Amenity {
 model Facility {
   id        String   @id @default(uuid())
   name      String   @unique
-  icon      String?  // Icon class or URL
+  icon      String?
+  category  FacilityCategory?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   properties PropertyFacility[]
 
   @@map("facilities")
@@ -127,11 +155,10 @@ model Availability {
   id            String   @id @default(uuid())
   date          DateTime
   isAvailable   Boolean  @default(true)
-  priceOverride Float?   // Override the base price for specific dates
+  priceOverride Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Relations
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId String
 
@@ -144,15 +171,17 @@ model Availability {
 // ===== BOOKING MODEL =====
 model Booking {
   id            String         @id @default(uuid())
-  checkIn       DateTime
-  checkOut      DateTime
+  checkIn       DateTime?
+  checkOut      DateTime?
   totalPrice    Float
   status        BookingStatus  @default(PENDING)
-  paymentStatus BookingPaymentStatus  @default(UNPAID) // CHANGED: Use separate enum for booking
+  paymentStatus BookingPaymentStatus @default(UNPAID)
+  bookingType   BookingType    @default(SHORT_STAY)
+  leaseDuration Int?
+  saleNegotiation Json?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  // Relations
   property      Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId    String
   guest         User           @relation("GuestBookings", fields: [guestId], references: [id], onDelete: Cascade)
@@ -160,29 +189,30 @@ model Booking {
   host          User           @relation("HostBookings", fields: [hostId], references: [id], onDelete: Cascade)
   hostId        String
   review        Review?
-  payment       Payment?       // ADDED: Relation to payment
+  payment       Payment?
 
   @@index([propertyId])
   @@index([guestId])
   @@index([hostId])
   @@index([checkIn, checkOut])
   @@index([status])
+  @@index([bookingType])
   @@map("bookings")
 }
 
 // ===== REVIEW MODEL =====
 model Review {
   id                String   @id @default(uuid())
-  ratingCleanliness Int      // 1-5 rating
-  ratingComfort     Int      // 1-5 rating
-  ratingLocation    Int      // 1-5 rating
-  ratingValue       Int      // 1-5 rating
-  overallRating     Float    // Calculated average
+  ratingCleanliness Int?
+  ratingComfort     Int?
+  ratingLocation    Int
+  ratingValue       Int
+  overallRating     Float
   comment           String?
+  reviewType        ReviewType @default(PROPERTY)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  // Relations
   booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   bookingId   String   @unique
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -202,18 +232,17 @@ model Payment {
   amount          Float
   currency        String         @default("USD")
   status          PaymentStatus  @default(PENDING)
-  paymentMethod   String?        // 'card', 'paypal', 'bank_transfer'
-  paymentIntentId String?        // Stripe or other provider ID
+  paymentMethod   String?
+  paymentIntentId String?
   receiptUrl      String?
-  metadata        Json?          // Additional payment data
+  metadata        Json?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  // Relations
   booking         Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   bookingId       String         @unique
   guest           User           @relation(fields: [guestId], references: [id], onDelete: Cascade)
-  guestId         String         // ADDED: Track who made the payment
+  guestId         String
 
   @@index([bookingId])
   @@index([guestId])
@@ -222,14 +251,33 @@ model Payment {
   @@map("payments")
 }
 
-// ===== JOIN TABLES =====
+// ===== SALE INQUIRY MODEL =====
+model SaleInquiry {
+  id           String            @id @default(uuid())
+  offeredPrice Float?
+  message      String?
+  status       SaleInquiryStatus @default(PENDING)
+  scheduledVisit DateTime?
+  contactPreference ContactPreference?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
-// Property-Amenity many-to-many relationship
+  property     Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId   String
+  buyer        User              @relation("BuyerInquiries", fields: [buyerId], references: [id], onDelete: Cascade)
+  buyerId      String
+
+  @@index([propertyId])
+  @@index([buyerId])
+  @@index([status])
+  @@map("sale_inquiries")
+}
+
+// ===== JOIN TABLES =====
 model PropertyAmenity {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  // Relations
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId String
   amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
@@ -241,12 +289,10 @@ model PropertyAmenity {
   @@map("property_amenities")
 }
 
-// Property-Facility many-to-many relationship
 model PropertyFacility {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  // Relations
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   propertyId String
   facility  Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
@@ -259,11 +305,11 @@ model PropertyFacility {
 }
 
 // ===== ENUMS =====
-
 enum UserRole {
   GUEST
   HOST
   ADMIN
+  AGENT
 }
 
 enum PropertyType {
@@ -272,18 +318,37 @@ enum PropertyType {
   ROOM
   HOUSE
   HOTEL
+  PLOT
+  COMMERCIAL_SHOP
+  COMMERCIAL_OFFICE
+  COMMERCIAL_BUILDING
+  INDUSTRIAL
+  WAREHOUSE
+  FARM_HOUSE
+  PENTHOUSE
+}
+
+enum PropertyPurpose {
+  RENT
+  SALE
+  RENT_AND_SALE
 }
 
 enum PropertyStatus {
-  ACTIVE
-  PENDING
   DRAFT
+  PENDING
+  ACTIVE
+  INACTIVE
   SUSPENDED
+  SOLD
+  RENTED
 }
 
 enum MediaType {
   IMAGE
   VIDEO
+  FLOOR_PLAN
+  DOCUMENT
 }
 
 enum BookingStatus {
@@ -293,7 +358,6 @@ enum BookingStatus {
   COMPLETED
 }
 
-// SEPARATE ENUMS FOR BOOKING VS PAYMENT STATUS
 enum BookingPaymentStatus {
   UNPAID
   PAID
@@ -307,4 +371,51 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   CANCELLED
+}
+
+enum BookingType {
+  SHORT_STAY
+  LONG_LEASE
+  SALE_INQUIRY
+  SITE_VISIT
+}
+
+enum SaleInquiryStatus {
+  PENDING
+  NEGOTIATING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+  SITE_VISIT_SCHEDULED
+}
+
+enum ContactPreference {
+  PHONE
+  EMAIL
+  WHATSAPP
+  ANY
+}
+
+enum AmenityCategory {
+  GENERAL
+  BEDROOM
+  KITCHEN
+  BATHROOM
+  OUTDOOR
+  SAFETY
+  ACCESSIBILITY
+}
+
+enum FacilityCategory {
+  BUILDING
+  NEIGHBORHOOD
+  PARKING
+  SECURITY
+  RECREATIONAL
+}
+
+enum ReviewType {
+  PROPERTY
+  HOST
+  AREA
 }

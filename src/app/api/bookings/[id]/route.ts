@@ -13,10 +13,10 @@ const validStatusTransitions: Record<string, string[]> = {
 // GET - Get single booking by ID
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const booking = await prisma.booking.findUnique({
       where: { id },
@@ -83,10 +83,10 @@ export async function GET(
 // PATCH - Update booking by ID (partial update)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
     const updateData = await request.json()
 
     // Remove id from update data to prevent changing the booking ID
@@ -179,10 +179,10 @@ export async function PATCH(
 // DELETE - Delete booking by ID
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params
+    const { id } = await params
 
     // Check if booking exists first
     const booking = await prisma.booking.findUnique({

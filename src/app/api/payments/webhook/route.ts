@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
-    const signature = request.headers.get('stripe-signature')
+    const _signature = request.headers.get('stripe-signature')
 
     // If you're not using Stripe yet, handle generic webhook data
     let eventData;

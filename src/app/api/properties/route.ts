@@ -1,122 +1,263 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import {
+  Prisma,
+  PropertyPurpose,
+  PropertyType,
+  UserRole,
+} from '@prisma/client'
+import {
+  PROPERTY_ORDER_BY,
+  PROPERTY_RELATIONS,
+  withReviewStats,
+} from './helpers'
 
-// GET - Read all properties with pagination
+const DEFAULT_LIMIT = 12
+const MAX_LIMIT = 50
+
+const RENT_PURPOSES: PropertyPurpose[] = [
+  PropertyPurpose.RENT,
+  PropertyPurpose.RENT_AND_SALE,
+]
+const SALE_PURPOSES: PropertyPurpose[] = [
+  PropertyPurpose.SALE,
+  PropertyPurpose.RENT_AND_SALE,
+]
+
+const isPropertyType = (value: string): value is PropertyType => {
+  return Object.values(PropertyType).includes(value as PropertyType)
+}
+
+const parseBooleanParam = (value: string | null) => {
+  if (value === null) return undefined
+  if (value.toLowerCase() === 'true') return true
+  if (value.toLowerCase() === 'false') return false
+  return undefined
+}
+
+// GET - Universal search with filters
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    
-    // Pagination parameters
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '12')
-    const skip = (page - 1) * limit
 
-    // Validate pagination parameters
-    if (page < 1 || limit < 1 || limit > 50) {
+    const pageParam = searchParams.get('page')
+    const limitParam = searchParams.get('limit')
+
+    const page = pageParam ? Number.parseInt(pageParam, 10) : 1
+    const limit = limitParam ? Number.parseInt(limitParam, 10) : DEFAULT_LIMIT
+
+    if (Number.isNaN(page) || page < 1) {
       return NextResponse.json(
-        { error: 'Invalid pagination parameters. Page must be >= 1, limit between 1-50' },
-        { status: 400 }
+        { error: 'Invalid page parameter' },
+        { status: 400 },
       )
     }
 
-    const filters: any = {
-      where: {
-        isDeleted: false,
-        status: 'ACTIVE' // Only show active properties
+    if (
+      Number.isNaN(limit) ||
+      limit < 1 ||
+      limit > MAX_LIMIT
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid limit parameter' },
+        { status: 400 },
+      )
+    }
+
+    const skip = (page - 1) * limit
+
+    const where: Prisma.PropertyWhereInput = {
+      isDeleted: false,
+      status: 'ACTIVE',
+    }
+
+    const purposeParam = searchParams.get('purpose')
+    let priceMode: 'RENT' | 'SALE' | 'ALL' = 'ALL'
+
+    if (purposeParam) {
+      if (purposeParam === PropertyPurpose.RENT) {
+        where.purpose = { in: RENT_PURPOSES }
+        priceMode = 'RENT'
+      } else if (purposeParam === PropertyPurpose.SALE) {
+        where.purpose = { in: SALE_PURPOSES }
+        priceMode = 'SALE'
+      } else if (purposeParam === PropertyPurpose.RENT_AND_SALE) {
+        where.purpose = PropertyPurpose.RENT_AND_SALE
+        priceMode = 'ALL'
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid purpose parameter' },
+          { status: 400 },
+        )
       }
     }
 
-    // Optional filters
-    if (searchParams.get('city')) {
-      filters.where.city = {
-        contains: searchParams.get('city')!,
-        mode: 'insensitive'
+    const typeParam = searchParams.get('type')
+    if (typeParam) {
+      if (!isPropertyType(typeParam)) {
+        return NextResponse.json(
+          { error: 'Invalid property type parameter' },
+          { status: 400 },
+        )
+      }
+      where.type = typeParam as PropertyType
+    }
+
+    const city = searchParams.get('city')
+    if (city) {
+      where.city = {
+        contains: city.trim(),
+        mode: 'insensitive',
       }
     }
 
-    if (searchParams.get('type')) {
-      filters.where.type = searchParams.get('type')!
-    }
-
-    if (searchParams.get('maxPrice')) {
-      filters.where.pricePerNight = {
-        lte: parseFloat(searchParams.get('maxPrice')!)
+    const state = searchParams.get('state')
+    if (state) {
+      where.state = {
+        contains: state.trim(),
+        mode: 'insensitive',
       }
     }
 
-    if (searchParams.get('minPrice')) {
-      filters.where.pricePerNight = {
-        ...filters.where.pricePerNight,
-        gte: parseFloat(searchParams.get('minPrice')!)
+    const country = searchParams.get('country')
+    if (country) {
+      where.country = {
+        contains: country.trim(),
+        mode: 'insensitive',
       }
     }
 
-    if (searchParams.get('minBedrooms')) {
-      filters.where.bedrooms = {
-        gte: parseInt(searchParams.get('minBedrooms')!)
+    const featured = parseBooleanParam(searchParams.get('featured'))
+    if (featured !== undefined) {
+      where.isFeatured = featured
+    }
+
+    const bedroomsParam = searchParams.get('bedrooms')
+    if (bedroomsParam) {
+      const bedrooms = Number.parseInt(bedroomsParam, 10)
+      if (Number.isNaN(bedrooms) || bedrooms < 0) {
+        return NextResponse.json(
+          { error: 'Invalid bedrooms parameter' },
+          { status: 400 },
+        )
+      }
+      where.bedrooms = { gte: bedrooms }
+    }
+
+    const bathroomsParam = searchParams.get('bathrooms')
+    if (bathroomsParam) {
+      const bathrooms = Number.parseInt(bathroomsParam, 10)
+      if (Number.isNaN(bathrooms) || bathrooms < 0) {
+        return NextResponse.json(
+          { error: 'Invalid bathrooms parameter' },
+          { status: 400 },
+        )
+      }
+      where.bathrooms = { gte: bathrooms }
+    }
+
+    const guestsParam = searchParams.get('maxGuests')
+    if (guestsParam) {
+      const guests = Number.parseInt(guestsParam, 10)
+      if (Number.isNaN(guests) || guests < 1) {
+        return NextResponse.json(
+          { error: 'Invalid maxGuests parameter' },
+          { status: 400 },
+        )
+      }
+      where.maxGuests = { gte: guests }
+    }
+
+    const minAreaParam = searchParams.get('minArea')
+    const maxAreaParam = searchParams.get('maxArea')
+
+    if (minAreaParam || maxAreaParam) {
+      const areaFilter: Prisma.FloatNullableFilter = {}
+
+      if (minAreaParam) {
+        const minArea = Number.parseFloat(minAreaParam)
+        if (Number.isNaN(minArea) || minArea < 0) {
+          return NextResponse.json(
+            { error: 'Invalid minArea parameter' },
+            { status: 400 },
+          )
+        }
+        areaFilter.gte = minArea
+      }
+
+      if (maxAreaParam) {
+        const maxArea = Number.parseFloat(maxAreaParam)
+        if (Number.isNaN(maxArea) || maxArea <= 0) {
+          return NextResponse.json(
+            { error: 'Invalid maxArea parameter' },
+            { status: 400 },
+          )
+        }
+        areaFilter.lte = maxArea
+      }
+
+      where.area = areaFilter
+    }
+
+    const minPriceParam = searchParams.get('minPrice')
+    const maxPriceParam = searchParams.get('maxPrice')
+
+    if (minPriceParam || maxPriceParam) {
+      const priceRange: Prisma.FloatNullableFilter = {}
+
+      if (minPriceParam) {
+        const minPrice = Number.parseFloat(minPriceParam)
+        if (Number.isNaN(minPrice) || minPrice < 0) {
+          return NextResponse.json(
+            { error: 'Invalid minPrice parameter' },
+            { status: 400 },
+          )
+        }
+        priceRange.gte = minPrice
+      }
+
+      if (maxPriceParam) {
+        const maxPrice = Number.parseFloat(maxPriceParam)
+        if (Number.isNaN(maxPrice) || maxPrice <= 0) {
+          return NextResponse.json(
+            { error: 'Invalid maxPrice parameter' },
+            { status: 400 },
+          )
+        }
+        priceRange.lte = maxPrice
+      }
+
+      if (priceMode === 'SALE') {
+        where.salePrice = {
+          ...(where.salePrice as Prisma.FloatNullableFilter | undefined),
+          ...priceRange,
+        }
+      } else if (priceMode === 'RENT') {
+        where.OR = [
+          { rentPrice: { ...priceRange } },
+          { pricePerNight: { ...priceRange } },
+        ]
+      } else {
+        where.OR = [
+          { salePrice: { ...priceRange } },
+          { rentPrice: { ...priceRange } },
+          { pricePerNight: { ...priceRange } },
+        ]
       }
     }
 
-    if (searchParams.get('minBathrooms')) {
-      filters.where.bathrooms = {
-        gte: parseInt(searchParams.get('minBathrooms')!)
-      }
-    }
-
-    if (searchParams.get('maxGuests')) {
-      filters.where.maxGuests = {
-        gte: parseInt(searchParams.get('maxGuests')!)
-      }
-    }
-
-    // Get paginated properties and total count
     const [properties, totalCount] = await Promise.all([
       prisma.property.findMany({
-        ...filters,
-        include: {
-          host: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              avatar: true
-            }
-          },
-          media: {
-            where: { isFeatured: true },
-            take: 1
-          },
-          amenities: {
-            include: {
-              amenity: true
-            }
-          },
-          facilities: {
-            include: {
-              facility: true
-            }
-          },
-          reviews: {
-            select: {
-              overallRating: true
-            }
-          }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        },
+        where,
+        include: PROPERTY_RELATIONS,
+        orderBy: PROPERTY_ORDER_BY,
         skip,
-        take: limit
+        take: limit,
       }),
-      prisma.property.count({ where: filters.where })
+      prisma.property.count({ where }),
     ])
 
-    // Calculate pagination metadata
     const totalPages = Math.ceil(totalCount / limit)
-    const hasNext = page < totalPages
-    const hasPrev = page > 1
-
-    console.log(`✅ Found ${properties.length} properties (Page ${page}/${totalPages})`)
 
     return NextResponse.json({
       pagination: {
@@ -124,227 +265,155 @@ export async function GET(request: NextRequest) {
         limit,
         totalCount,
         totalPages,
-        hasNext,
-        hasPrev,
-        nextPage: hasNext ? page + 1 : null,
-        prevPage: hasPrev ? page - 1 : null
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
       },
-      data: properties
+      data: withReviewStats(properties),
     })
-
   } catch (error: any) {
-    console.error('❌ Get properties error:', error)
+    console.error('Get properties error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch properties', details: error.message },
-      { status: 500 }
+      { error: 'Failed to fetch properties' },
+      { status: 500 },
     )
   }
 }
 
-// POST - Create property
+// POST - Create new property listing
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    
+
     const {
-      title, 
-      description, 
-      type, 
-      pricePerNight, 
-      address, 
-      city, 
+      title,
+      description,
+      type,
+      purpose = PropertyPurpose.RENT,
+      salePrice,
+      rentPrice,
+      pricePerNight,
+      address,
+      city,
+      state,
       country,
-      bedrooms, 
-      bathrooms, 
-      maxGuests,
-      hostId,
       latitude,
       longitude,
-      policies
+      area,
+      areaUnit = 'sqft',
+      bedrooms,
+      bathrooms,
+      maxGuests,
+      yearBuilt,
+      plotArea,
+      isFurnished = false,
+      ownershipType,
+      possessionDate,
+      policies,
+      hostId,
     } = body
 
-    console.log('🏠 Creating property with data:', { title, type, pricePerNight, hostId })
+    const requiredFields = ['title', 'type', 'address', 'city', 'country', 'hostId']
+    const missingFields = requiredFields.filter((field) => !body[field])
 
-    // Validate required fields
-    const requiredFields = ['title', 'type', 'pricePerNight', 'address', 'city', 'country', 'maxGuests', 'hostId']
-    const missingFields = requiredFields.filter(field => !body[field])
-    
     if (missingFields.length > 0) {
       return NextResponse.json(
-        { 
+        {
           error: 'Missing required fields',
           missingFields,
-          received: body
         },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    // Validate PropertyType enum
-    const validPropertyTypes = ['APARTMENT', 'VILLA', 'ROOM', 'HOUSE', 'HOTEL']
-    if (!validPropertyTypes.includes(type)) {
+    if (!isPropertyType(type)) {
       return NextResponse.json(
-        { 
-          error: 'Invalid property type',
-          validTypes: validPropertyTypes,
-          received: type
-        },
-        { status: 400 }
+        { error: 'Invalid property type' },
+        { status: 400 },
       )
     }
 
-    // Check if host exists and is a host
+    if (!Object.values(PropertyPurpose).includes(purpose)) {
+      return NextResponse.json(
+        { error: 'Invalid property purpose' },
+        { status: 400 },
+      )
+    }
+
     const host = await prisma.user.findUnique({
-      where: { id: hostId }
+      where: { id: hostId },
     })
 
     if (!host) {
       return NextResponse.json(
         { error: 'Host not found' },
-        { status: 404 }
+        { status: 404 },
       )
     }
 
-    if (host.role !== 'HOST' && host.role !== 'ADMIN') {
+    if (host.role !== UserRole.HOST && host.role !== UserRole.ADMIN) {
       return NextResponse.json(
-        { error: 'User is not a host' },
-        { status: 403 }
+        { error: 'User does not have permission to host properties' },
+        { status: 403 },
       )
     }
 
-    // Create property
+    const requiresSalePrice = [PropertyPurpose.SALE, PropertyPurpose.RENT_AND_SALE].includes(purpose)
+    const requiresRentPrice = [PropertyPurpose.RENT, PropertyPurpose.RENT_AND_SALE].includes(purpose)
+
+    if (requiresSalePrice && (salePrice === undefined || salePrice === null)) {
+      return NextResponse.json(
+        { error: 'Sale price is required for sale listings' },
+        { status: 400 },
+      )
+    }
+
+    if (requiresRentPrice && rentPrice === undefined && pricePerNight === undefined) {
+      return NextResponse.json(
+        { error: 'Rent price or nightly price is required for rental listings' },
+        { status: 400 },
+      )
+    }
+
     const property = await prisma.property.create({
       data: {
         title: title.trim(),
-        description: description?.trim() || '',
-        type: type as any,
-        pricePerNight: parseFloat(pricePerNight),
-        maxGuests: parseInt(maxGuests),
-        bedrooms: parseInt(bedrooms) || 1,
-        bathrooms: parseInt(bathrooms) || 1,
+        description: description?.trim() ?? '',
+        type,
+        purpose,
+        salePrice: salePrice ? Number.parseFloat(String(salePrice)) : null,
+        rentPrice: rentPrice ? Number.parseFloat(String(rentPrice)) : null,
+        pricePerNight: pricePerNight ? Number.parseFloat(String(pricePerNight)) : null,
         address: address.trim(),
         city: city.trim(),
+        state: state?.trim(),
         country: country.trim(),
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
-        policies: policies || {},
+        latitude: latitude ? Number.parseFloat(String(latitude)) : null,
+        longitude: longitude ? Number.parseFloat(String(longitude)) : null,
+        area: area ? Number.parseFloat(String(area)) : null,
+        areaUnit,
+        bedrooms: bedrooms ? Number.parseInt(String(bedrooms), 10) : null,
+        bathrooms: bathrooms ? Number.parseInt(String(bathrooms), 10) : null,
+        maxGuests: maxGuests ? Number.parseInt(String(maxGuests), 10) : null,
+        yearBuilt: yearBuilt ? Number.parseInt(String(yearBuilt), 10) : null,
+        plotArea: plotArea ? Number.parseFloat(String(plotArea)) : null,
+        isFurnished,
+        ownershipType: ownershipType?.trim(),
+        possessionDate: possessionDate ? new Date(possessionDate) : null,
+        policies: policies ?? {},
         hostId,
-        status: 'DRAFT' // Start as draft, host can activate later
       },
-      include: {
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true
-          }
-        }
-      }
+      include: PROPERTY_RELATIONS,
     })
 
-    console.log('✅ Property created successfully:', property.id)
-
     return NextResponse.json(property, { status: 201 })
-
   } catch (error: any) {
     console.error('❌ Create property error:', error)
     return NextResponse.json(
-      { error: 'Failed to create property', details: error.message },
-      { status: 500 }
-    )
-  }
-}
-
-// PUT - Update property
-export async function PUT(request: NextRequest) {
-  try {
-    const { id, ...updateData } = await request.json()
-    
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Property ID is required' },
-        { status: 400 }
-      )
-    }
-
-    // Check if property exists
-    const existingProperty = await prisma.property.findUnique({
-      where: { id }
-    })
-
-    if (!existingProperty) {
-      return NextResponse.json(
-        { error: 'Property not found' },
-        { status: 404 }
-      )
-    }
-
-    const property = await prisma.property.update({
-      where: { id },
-      data: updateData,
-      include: {
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true
-          }
-        }
-      }
-    })
-
-    return NextResponse.json(property)
-
-  } catch (error: any) {
-    console.error('Update property error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update property', details: error.message },
-      { status: 500 }
-    )
-  }
-}
-
-// DELETE - Delete property (soft delete)
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Property ID is required' },
-        { status: 400 }
-      )
-    }
-
-    // Check if property exists
-    const existingProperty = await prisma.property.findUnique({
-      where: { id }
-    })
-
-    if (!existingProperty) {
-      return NextResponse.json(
-        { error: 'Property not found' },
-        { status: 404 }
-      )
-    }
-
-    const property = await prisma.property.update({
-      where: { id },
-      data: { isDeleted: true }
-    })
-
-    return NextResponse.json({ 
-      message: 'Property deleted successfully',
-      property 
-    })
-
-  } catch (error: any) {
-    console.error('Delete property error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete property', details: error.message },
-      { status: 500 }
+      {
+        error: 'Failed to create property',
+        details: error.message,
+      },
+      { status: 500 },
     )
   }
 }

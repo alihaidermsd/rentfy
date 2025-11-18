@@ -1,4 +1,6 @@
 // /app/properties/page.tsx
+import Image from 'next/image'
+
 interface PropertiesPageProps {
   searchParams: Promise<{ [key: string]: string }>
 }
@@ -99,10 +101,12 @@ export default async function PropertiesPage({ searchParams }: PropertiesPagePro
                 {/* Property Image */}
                 <div className="relative h-48 bg-gray-200">
                   {property.media && property.media.length > 0 ? (
-                    <img
+                    <Image
                       src={property.media[0].url}
                       alt={property.title}
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 25vw"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">

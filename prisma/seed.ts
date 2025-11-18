@@ -69,7 +69,7 @@ async function main() {
 
   // ===== SEED USERS =====
   console.log('👥 Creating users...')
-  const users = await prisma.user.createMany({
+  await prisma.user.createMany({
     data: [
       {
         name: "Syed Arsarn",
@@ -221,6 +221,7 @@ async function main() {
         title: "Modern Family House with Garden",
         description: "Spacious family home with beautiful garden and outdoor dining area. Perfect for families with children. Features large kitchen, comfortable living spaces, and peaceful neighborhood.",
         type: "HOUSE",
+        purpose: "RENT",
         pricePerNight: 180.00,
         maxGuests: 6,
         bedrooms: 3,
@@ -244,12 +245,71 @@ async function main() {
         },
         hostId: host2.id
       }
+    }),
+    prisma.property.create({
+      data: {
+        title: "Executive Corporate Office Tower",
+        description: "Grade-A office tower located in the heart of the financial district. Ideal for multinational headquarters with premium finishes, smart building management, and ample parking.",
+        type: "COMMERCIAL_OFFICE",
+        purpose: "SALE",
+        salePrice: 2800000,
+        area: 45000,
+        areaUnit: "sqft",
+        address: "555 Market Street",
+        city: "San Francisco",
+        country: "United States",
+        latitude: 37.7897,
+        longitude: -122.4011,
+        status: "ACTIVE",
+        ownershipType: "FREEHOLD",
+        isFurnished: false,
+        hostId: host1.id
+      }
+    }),
+    prisma.property.create({
+      data: {
+        title: "Premium Residential Plot in DHA Phase 8",
+        description: "Prime 1-kanal residential plot located near main boulevard with immediate possession. Ideal for luxury villa construction with direct access to community parks and schools.",
+        type: "PLOT",
+        purpose: "SALE",
+        salePrice: 450000,
+        plotArea: 5445, // 1 kanal in sq.ft approx
+        areaUnit: "sqft",
+        address: "Sector C, DHA Phase 8",
+        city: "Lahore",
+        country: "Pakistan",
+        latitude: 31.4717,
+        longitude: 74.4080,
+        status: "ACTIVE",
+        ownershipType: "LEASEHOLD",
+        hostId: host2.id
+      }
+    }),
+    prisma.property.create({
+      data: {
+        title: "Mixed-Use Downtown Building (Rent & Sale)",
+        description: "Five-story mixed-use building featuring street-level retail, three floors of flexible office space, and penthouse event venue. Available for both outright purchase and long-term lease.",
+        type: "COMMERCIAL_BUILDING",
+        purpose: "RENT_AND_SALE",
+        salePrice: 3250000,
+        rentPrice: 25000,
+        area: 38000,
+        address: "88 Liberty Avenue",
+        city: "Toronto",
+        country: "Canada",
+        latitude: 43.6406,
+        longitude: -79.4302,
+        status: "ACTIVE",
+        ownershipType: "FREEHOLD",
+        isFurnished: true,
+        hostId: host1.id
+      }
     })
   ])
 
   // ===== SEED PROPERTY MEDIA =====
   console.log('📸 Creating property media...')
-  const propertyMedia = await Promise.all([
+  await Promise.all([
     // Property 1 media
     prisma.propertyMedia.createMany({
       data: [
@@ -339,6 +399,63 @@ async function main() {
           propertyId: properties[3].id
         }
       ]
+    }),
+    // Property 5 media (Commercial office)
+    prisma.propertyMedia.createMany({
+      data: [
+        {
+          url: "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=800&h=600&fit=crop",
+          type: "IMAGE",
+          isFeatured: true,
+          order: 1,
+          propertyId: properties[4].id
+        },
+        {
+          url: "https://images.unsplash.com/photo-1507209696998-3c532be9b2b4?w=800&h=600&fit=crop",
+          type: "IMAGE",
+          isFeatured: false,
+          order: 2,
+          propertyId: properties[4].id
+        }
+      ]
+    }),
+    // Property 6 media (Residential plot)
+    prisma.propertyMedia.createMany({
+      data: [
+        {
+          url: "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=800&h=600&fit=crop",
+          type: "IMAGE",
+          isFeatured: true,
+          order: 1,
+          propertyId: properties[5].id
+        },
+        {
+          url: "https://images.unsplash.com/photo-1501876725168-00c445821c9e?w=800&h=600&fit=crop",
+          type: "IMAGE",
+          isFeatured: false,
+          order: 2,
+          propertyId: properties[5].id
+        }
+      ]
+    }),
+    // Property 7 media (Mixed-use building)
+    prisma.propertyMedia.createMany({
+      data: [
+        {
+          url: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&h=600&fit=crop",
+          type: "IMAGE",
+          isFeatured: true,
+          order: 1,
+          propertyId: properties[6].id
+        },
+        {
+          url: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800&h=600&fit=crop",
+          type: "IMAGE",
+          isFeatured: false,
+          order: 2,
+          propertyId: properties[6].id
+        }
+      ]
     })
   ])
 
@@ -398,6 +515,26 @@ async function main() {
     ]
   })
 
+  // Property 5 amenities (office)
+  await prisma.propertyAmenity.createMany({
+    data: [
+      { propertyId: properties[4].id, amenityId: amenities.find(a => a.name === "Wi-Fi")!.id },
+      { propertyId: properties[4].id, amenityId: amenities.find(a => a.name === "Air Conditioning")!.id },
+      { propertyId: properties[4].id, amenityId: amenities.find(a => a.name === "Laptop Friendly Workspace")!.id },
+      { propertyId: properties[4].id, amenityId: amenities.find(a => a.name === "Heating")!.id }
+    ]
+  })
+
+  // Property 7 amenities (mixed-use)
+  await prisma.propertyAmenity.createMany({
+    data: [
+      { propertyId: properties[6].id, amenityId: amenities.find(a => a.name === "Wi-Fi")!.id },
+      { propertyId: properties[6].id, amenityId: amenities.find(a => a.name === "Air Conditioning")!.id },
+      { propertyId: properties[6].id, amenityId: amenities.find(a => a.name === "Heating")!.id },
+      { propertyId: properties[6].id, amenityId: amenities.find(a => a.name === "Laptop Friendly Workspace")!.id }
+    ]
+  })
+
   // ===== SEED PROPERTY FACILITIES =====
   console.log('🏊 Creating property facilities...')
   const facilities = await prisma.facility.findMany()
@@ -440,6 +577,35 @@ async function main() {
     ]
   })
 
+  // Property 5 facilities (office)
+  await prisma.propertyFacility.createMany({
+    data: [
+      { propertyId: properties[4].id, facilityId: facilities.find(f => f.name === "Parking")!.id },
+      { propertyId: properties[4].id, facilityId: facilities.find(f => f.name === "Security")!.id },
+      { propertyId: properties[4].id, facilityId: facilities.find(f => f.name === "Business Center")!.id },
+      { propertyId: properties[4].id, facilityId: facilities.find(f => f.name === "Elevator")!.id }
+    ]
+  })
+
+  // Property 6 facilities (plot)
+  await prisma.propertyFacility.createMany({
+    data: [
+      { propertyId: properties[5].id, facilityId: facilities.find(f => f.name === "Security")!.id },
+      { propertyId: properties[5].id, facilityId: facilities.find(f => f.name === "Parking")!.id }
+    ]
+  })
+
+  // Property 7 facilities (mixed use)
+  await prisma.propertyFacility.createMany({
+    data: [
+      { propertyId: properties[6].id, facilityId: facilities.find(f => f.name === "Parking")!.id },
+      { propertyId: properties[6].id, facilityId: facilities.find(f => f.name === "Security")!.id },
+      { propertyId: properties[6].id, facilityId: facilities.find(f => f.name === "Elevator")!.id },
+      { propertyId: properties[6].id, facilityId: facilities.find(f => f.name === "Business Center")!.id },
+      { propertyId: properties[6].id, facilityId: facilities.find(f => f.name === "Luggage Storage")!.id }
+    ]
+  })
+
   // ===== SEED AVAILABILITY =====
   console.log('📅 Creating availability...')
   const today = new Date()
@@ -454,7 +620,9 @@ async function main() {
       // Random availability (90% chance of being available)
       const isAvailable = Math.random() > 0.1
       // Random price override (10% chance of having override)
-      const priceOverride = Math.random() > 0.9 ? property.pricePerNight * (0.8 + Math.random() * 0.4) : null
+      const basePrice =
+        property.pricePerNight ?? property.rentPrice ?? property.salePrice ?? 100
+      const priceOverride = Math.random() > 0.9 ? basePrice * (0.8 + Math.random() * 0.4) : null
       
       availabilityData.push({
         propertyId: property.id,
