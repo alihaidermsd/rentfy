@@ -7,11 +7,10 @@ export async function GET() {
     const dbTest = await prisma.$queryRaw`SELECT 1 as connection_test`
     
     // 2. Test database schema by checking tables
-    const tables = await Promise.all([
+    const [usersCount, propertiesCount, bookingsCount] = await Promise.all([
       prisma.user.count(),
       prisma.property.count(),
-      prisma.service.count(),
-      prisma.booking.count()
+      prisma.booking.count(),
     ])
     
     // 3. Check environment variables
@@ -28,10 +27,9 @@ export async function GET() {
         connection: 'Connected successfully',
         connectionTest: dbTest,
         tables: {
-          users: tables[0],
-          properties: tables[1],
-          services: tables[2],
-          bookings: tables[3]
+          users: usersCount,
+          properties: propertiesCount,
+          bookings: bookingsCount,
         }
       },
       environment: envCheck,

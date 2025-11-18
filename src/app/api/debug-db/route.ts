@@ -13,10 +13,12 @@ export async function GET() {
       select: {
         id: true,
         title: true,
-        price: true,
-        isAvailable: true,
-        ownerId: true
-      }
+        pricePerNight: true,
+        rentPrice: true,
+        salePrice: true,
+        status: true,
+        hostId: true,
+      },
     });
 
     // Check users count

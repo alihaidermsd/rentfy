@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { AuthUtils } from '@/utils/auth'
 
 // GET - Read users
 export async function GET(request: NextRequest) {

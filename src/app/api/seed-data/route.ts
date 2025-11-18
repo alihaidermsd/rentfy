@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import bcrypt from 'bcryptjs'
 
 export async function GET() {
   try {
@@ -14,83 +13,87 @@ export async function GET() {
     console.log('🗑️ Cleared existing data')
 
     // Create test user
-    const hashedPassword = await bcrypt.hash('password123', 12)
     const testUser = await prisma.user.create({
       data: {
         email: 'test@example.com',
-        password: hashedPassword,
         name: 'Test User',
         phone: '03001234567',
-        role: 'USER'
+        role: 'HOST'
       }
     })
 
     console.log('👤 Created test user:', testUser.email)
 
     // Create properties using CORRECT enum values from your schema
-    const property1 = await prisma.property.create({
+    await prisma.property.create({
       data: {
         title: 'Modern Apartment in Karachi',
         description: 'Beautiful 2-bedroom apartment with sea view in Clifton',
-        type: 'APARTMENT', // Correct enum value
-        price: 25000000,
-        location: 'Clifton Block 5',
-        city: 'Karachi',
+        type: 'APARTMENT',
+        purpose: 'RENT',
+        pricePerNight: 140,
+        rentPrice: 2400,
+        maxGuests: 4,
         bedrooms: 2,
         bathrooms: 2,
-        areaSqft: 1200,
-        ownerId: testUser.id,
-        isAvailable: true,
-        images: []
+        address: 'Clifton Block 5',
+        city: 'Karachi',
+        country: 'Pakistan',
+        area: 1200,
+        status: 'ACTIVE',
+        hostId: testUser.id
       }
     })
 
-    const property2 = await prisma.property.create({
+    await prisma.property.create({
       data: {
         title: 'Luxury House in DHA Lahore',
         description: 'Spacious 4-bedroom house with garden and parking',
-        type: 'HOUSE', // Changed from VILLA to HOUSE
-        price: 45000000,
-        location: 'DHA Phase 6',
-        city: 'Lahore',
+        type: 'HOUSE',
+        purpose: 'SALE',
+        salePrice: 45000000,
         bedrooms: 4,
         bathrooms: 3,
-        areaSqft: 2800,
-        ownerId: testUser.id,
-        isAvailable: true,
-        images: []
+        maxGuests: 8,
+        address: 'DHA Phase 6',
+        city: 'Lahore',
+        country: 'Pakistan',
+        area: 2800,
+        status: 'ACTIVE',
+        hostId: testUser.id
       }
     })
 
-    const property3 = await prisma.property.create({
+    await prisma.property.create({
       data: {
         title: 'Commercial Office Space Islamabad',
         description: 'Prime location commercial space in Blue Area',
-        type: 'COMMERCIAL', // Correct enum value
-        price: 35000000,
-        location: 'Blue Area',
+        type: 'COMMERCIAL_OFFICE',
+        purpose: 'RENT_AND_SALE',
+        salePrice: 35000000,
+        rentPrice: 30000,
+        area: 1500,
+        address: 'Blue Area',
         city: 'Islamabad',
-        bedrooms: 0,
-        bathrooms: 2,
-        areaSqft: 1500,
-        ownerId: testUser.id,
-        isAvailable: true,
-        images: []
+        country: 'Pakistan',
+        status: 'ACTIVE',
+        hostId: testUser.id
       }
     })
 
-    const property4 = await prisma.property.create({
+    await prisma.property.create({
       data: {
         title: 'Residential Plot in Bahria Town',
         description: '500 sq yard residential plot with prime location',
-        type: 'PLOT', // Correct enum value
-        price: 15000000,
-        location: 'Bahria Town',
+        type: 'PLOT',
+        purpose: 'SALE',
+        salePrice: 15000000,
+        plotArea: 4500,
+        address: 'Bahria Town',
         city: 'Rawalpindi',
-        areaSqft: 4500,
-        ownerId: testUser.id,
-        isAvailable: true,
-        images: []
+        country: 'Pakistan',
+        status: 'ACTIVE',
+        hostId: testUser.id
       }
     })
 
@@ -103,11 +106,18 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        users: allUsers.map((u: { id: any; email: any; name: any }) => ({ id: u.id, email: u.email, name: u.name })),
-        properties: allProperties.map((p: { id: any; title: any; price: any; type: any; city: any }) => ({ id: p.id, title: p.title, price: p.price, type: p.type, city: p.city })),
+        users: allUsers.map((u) => ({ id: u.id, email: u.email, name: u.name })),
+        properties: allProperties.map((p) => ({
+          id: p.id,
+          title: p.title,
+          type: p.type,
+          city: p.city,
+          pricePerNight: p.pricePerNight,
+          rentPrice: p.rentPrice,
+          salePrice: p.salePrice,
+        })),
         credentials: {
           email: 'test@example.com',
-          password: 'password123'
         }
       },
       message: `Seeded ${allUsers.length} users and ${allProperties.length} properties successfully`

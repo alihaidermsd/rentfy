@@ -1,8 +1,9 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Image from 'next/image'
 
 interface Booking {
   id: string
@@ -50,13 +51,7 @@ export default function BookingDetailPage() {
   const [error, setError] = useState('')
   const [updating, setUpdating] = useState(false)
 
-  useEffect(() => {
-    if (bookingId) {
-      fetchBooking()
-    }
-  }, [bookingId])
-
-  const fetchBooking = async () => {
+  const fetchBooking = useCallback(async () => {
     try {
       const response = await fetch(`/api/bookings/${bookingId}`)
       const data = await response.json()
@@ -72,7 +67,13 @@ export default function BookingDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [bookingId])
+
+  useEffect(() => {
+    if (bookingId) {
+      fetchBooking()
+    }
+  }, [bookingId, fetchBooking])
 
   const updateBookingStatus = async (newStatus: string) => {
     if (!confirm(`Are you sure you want to ${newStatus.toLowerCase()} this booking?`)) {
@@ -197,15 +198,19 @@ export default function BookingDetailPage() {
             <h2 className="text-xl font-semibold mb-4">Property Information</h2>
             
             <div className="flex items-start space-x-4">
-              <div className="w-24 h-24 bg-gray-200 rounded-lg shrink-0">
+              <div className="w-24 h-24 bg-gray-200 rounded-lg shrink-0 overflow-hidden">
                 {booking.property.media.length > 0 ? (
-                  <img
-                    src={booking.property.media[0].url}
-                    alt={booking.property.title}
-                    className="w-full h-full object-cover rounded-lg"
-                  />
+                  <div className="relative w-full h-full">
+                    <Image
+                      src={booking.property.media[0].url}
+                      alt={booking.property.title}
+                      fill
+                      className="object-cover rounded-lg"
+                      sizes="96px"
+                    />
+                  </div>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
                     No Image
                   </div>
                 )}
@@ -260,13 +265,17 @@ export default function BookingDetailPage() {
             <h2 className="text-xl font-semibold mb-4">Guest Information</h2>
             
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center">
+              <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
                 {booking.guest.avatar ? (
-                  <img
-                    src={booking.guest.avatar}
-                    alt={booking.guest.name}
-                    className="w-full h-full object-cover rounded-full"
-                  />
+                  <div className="relative w-full h-full">
+                    <Image
+                      src={booking.guest.avatar}
+                      alt={booking.guest.name}
+                      fill
+                      className="object-cover rounded-full"
+                      sizes="64px"
+                    />
+                  </div>
                 ) : (
                   <span className="text-gray-400 text-lg">
                     {booking.guest.name.charAt(0).toUpperCase()}
@@ -345,13 +354,17 @@ export default function BookingDetailPage() {
             <h2 className="text-xl font-semibold mb-4">Host Information</h2>
             
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
                 {booking.host.avatar ? (
-                  <img
-                    src={booking.host.avatar}
-                    alt={booking.host.name}
-                    className="w-full h-full object-cover rounded-full"
-                  />
+                  <div className="relative w-full h-full">
+                    <Image
+                      src={booking.host.avatar}
+                      alt={booking.host.name}
+                      fill
+                      className="object-cover rounded-full"
+                      sizes="48px"
+                    />
+                  </div>
                 ) : (
                   <span className="text-gray-400">
                     {booking.host.name.charAt(0).toUpperCase()}

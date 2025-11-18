@@ -1,8 +1,9 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 interface Booking {
   id: string
@@ -35,11 +36,7 @@ export default function BookingsPage() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all') // all, pending, confirmed, completed, cancelled
 
-  useEffect(() => {
-    fetchBookings()
-  }, [filter])
-
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setLoading(true)
       const url = filter === 'all' 
@@ -60,7 +57,11 @@ export default function BookingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    fetchBookings()
+  }, [fetchBookings])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -80,6 +81,32 @@ export default function BookingsPage() {
       default: return 'bg-gray-100 text-gray-800'
     }
   }
+
+  const updateBookingStatus = useCallback(
+    async (bookingId: string, newStatus: string) => {
+      try {
+        const response = await fetch(`/api/bookings/${bookingId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: newStatus }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to update booking')
+        }
+
+        await fetchBookings()
+      } catch (err: any) {
+        alert(err.message)
+        console.error('Error updating booking:', err)
+      }
+    },
+    [fetchBookings],
+  )
 
   if (loading) {
     return (
@@ -142,11 +169,15 @@ export default function BookingsPage() {
                   <div className="flex items-start space-x-4">
                     <div className="w-24 h-24 bg-gray-200 rounded-lg shrink-0">
                       {booking.property.media.length > 0 ? (
-                        <img
-                          src={booking.property.media[0].url}
-                          alt={booking.property.title}
-                          className="w-full h-full object-cover rounded-lg"
-                        />
+                        <div className="relative w-full h-full">
+                          <Image
+                            src={booking.property.media[0].url}
+                            alt={booking.property.title}
+                            fill
+                            className="object-cover rounded-lg"
+                            sizes="96px"
+                          />
+                        </div>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">
                           No Image
@@ -223,27 +254,4 @@ export default function BookingsPage() {
     </div>
   )
 
-  async function updateBookingStatus(bookingId: string, newStatus: string) {
-    try {
-      const response = await fetch(`/api/bookings/${bookingId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus })
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update booking')
-      }
-
-      // Refresh the list
-      fetchBookings()
-    } catch (err: any) {
-      alert(err.message)
-      console.error('Error updating booking:', err)
-    }
-  }
 }

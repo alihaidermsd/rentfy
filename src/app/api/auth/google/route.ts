@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken'
 
 export async function POST(request: Request) {
   try {
-    const { email, name, googleId, avatar } = await request.json()
+    const { email, name, avatar } = await request.json()
 
     // Find or create user
     let user = await prisma.user.findFirst({
